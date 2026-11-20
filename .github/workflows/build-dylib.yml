@@ -18,9 +18,26 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Finds the directory holding CMakeLists.txt, wherever you put it.
+      - name: Locate sources
+        id: src
+        run: |
+          echo "--- repository tree ---"
+          find . -path ./.git -prune -o -type f -print | sort
+          echo "------------------------"
+          FILE=$(find . -path ./.git -prune -o -name CMakeLists.txt -type f -print | head -n 1)
+          if [ -z "$FILE" ]; then
+            echo "::error::No CMakeLists.txt found in the repository."
+            echo "::error::Add CMakeLists.txt next to panel.cpp and advanced_panel.h."
+            exit 1
+          fi
+          DIR=$(dirname "$FILE")
+          echo "Found CMakeLists.txt at: $FILE"
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+
       - name: Configure
         run: |
-          cmake -S . -B build/macos \
+          cmake -S "${{ steps.src.outputs.dir }}" -B build/macos \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
@@ -46,7 +63,7 @@ jobs:
         run: |
           mkdir -p dist
           cp build/macos/libadvanced_panel.dylib dist/
-          cp advanced_panel.h dist/
+          cp "${{ steps.src.outputs.dir }}/advanced_panel.h" dist/
           cd dist && zip -r ../AdvancedPanel-dylib.zip .
 
       - uses: actions/upload-artifact@v4
