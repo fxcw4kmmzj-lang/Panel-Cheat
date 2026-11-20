@@ -1,0 +1,55 @@
+name: Build AdvancedPanel Dylib
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  dylib:
+    name: macOS universal dylib
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure
+        run: |
+          cmake -S . -B build/macos \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+            -DAP_BUILD_OBJC=OFF \
+            -DAP_BUILD_EXAMPLES=OFF
+
+      - name: Build
+        run: cmake --build build/macos --config ${{ env.BUILD_TYPE }} -j $(sysctl -n hw.ncpu)
+
+      - name: Verify universal slice
+        run: |
+          ARCHS=$(lipo -info build/macos/libadvanced_panel.dylib)
+          echo "$ARCHS"
+          echo "$ARCHS" | grep -q "arm64"
+          echo "$ARCHS" | grep -q "x86_64"
+
+      - name: Verify exported ABI
+        run: |
+          nm -gU build/macos/libadvanced_panel.dylib | grep -q "_ap_create"
+          nm -gU build/macos/libadvanced_panel.dylib | grep -q "_ap_serialize"
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp build/macos/libadvanced_panel.dylib dist/
+          cp advanced_panel.h dist/
+          cd dist && zip -r ../AdvancedPanel-dylib.zip .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AdvancedPanel-dylib
+          path: AdvancedPanel-dylib.zip
